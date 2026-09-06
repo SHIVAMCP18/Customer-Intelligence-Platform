@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const AI_BACKEND = process.env.NEXT_PUBLIC_AI_BACKEND_URL ?? "http://localhost:8000";
+const AI_BACKEND = process.env.AI_BACKEND_URL ?? "http://localhost:8000";
 
 export async function POST(req: NextRequest) {
   try {

@@ -13,7 +13,7 @@ def _get_llm() -> ChatGroq:
     key = os.environ.get("GROQ_API_KEY", "")
     if not key:
         raise RuntimeError("GROQ_API_KEY is not set. Check backend/.env")
-    return ChatGroq(temperature=0, model_name="mixtral-8x7b-32768", groq_api_key=key)
+    return ChatGroq(temperature=0, model_name="openai/gpt-oss-120b", groq_api_key=key)
 
 SYSTEM_PROMPT = """You are an expert customer intelligence analyst. You have access to
 customer feedback data from the VoiceIQ platform. Answer the user's questions clearly,

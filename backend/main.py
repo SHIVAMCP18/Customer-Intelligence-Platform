@@ -7,8 +7,8 @@ from dotenv import load_dotenv
 # Load .env file (used in local dev; in Docker the vars are injected directly)
 load_dotenv()
 
-from .routers import feedback as feedback_router
-from .routers import chat as chat_router
+from routers import feedback as feedback_router
+from routers import chat as chat_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

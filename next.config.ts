@@ -54,7 +54,7 @@ const widgetHeaders = [
   },
 ];
 
-const nextConfig: NextConfig = {
+const nextConfig: NextConfig = { output: "standalone",
   async headers() {
     return [
       {
@@ -76,6 +76,6 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-};
-
+  turbopack: { root: __dirname },
+}
 export default nextConfig;

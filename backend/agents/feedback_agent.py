@@ -12,7 +12,7 @@ def _get_llm() -> ChatGroq:
     key = os.environ.get("GROQ_API_KEY", "")
     if not key:
         raise RuntimeError("GROQ_API_KEY is not set. Check backend/.env")
-    return ChatGroq(temperature=0, model_name="llama-3.1-8b-instant", groq_api_key=key)
+    return ChatGroq(temperature=0, model_name="openai/gpt-oss-20b", groq_api_key=key)
 
 class AgentState(TypedDict):
     feedback_text: str
