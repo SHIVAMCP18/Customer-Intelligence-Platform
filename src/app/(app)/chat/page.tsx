@@ -23,7 +23,10 @@ export default async function ChatPage() {
   const context =
     (data ?? [])
       .map((item) => {
-        const channel = (item.channels as { name: string } | null)?.name ?? "unknown";
+        const channelsField = item.channels as { name: string }[] | { name: string } | null;
+        const channel = Array.isArray(channelsField)
+          ? channelsField[0]?.name ?? "unknown"
+          : channelsField?.name ?? "unknown";
         const sentiment = item.sentiment ?? "unanalyzed";
         return `[${channel} | ${sentiment}] ${item.content}`;
       })
