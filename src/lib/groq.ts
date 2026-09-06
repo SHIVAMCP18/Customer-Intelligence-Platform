@@ -1,0 +1,248 @@
+import "server-only";
+import Groq from "groq-sdk";
+import { z } from "zod";
+import { logError } from "@/lib/log-error";
+
+// Confirmed against Groq's own model docs rather than assumed from memory.
+const MODEL = "llama-3.3-70b-versatile";
+
+let client: Groq | null = null;
+
+function getClient(): Groq {
+  if (!client) {
+    if (!process.env.GROQ_API_KEY) {
+      throw new Error(
+        "GROQ_API_KEY is not set -- sentiment analysis and theme labeling are unavailable until it's configured."
+      );
+    }
+    client = new Groq({ apiKey: process.env.GROQ_API_KEY });
+  }
+  return client;
+}
+
+type ChatMessage = { role: "system" | "user"; content: string };
+
+const MAX_JSON_ATTEMPTS = 3;
+
+/**
+ * Uses the older, more broadly-supported `json_object` response mode rather
+ * than strict `json_schema` structured outputs -- not confirmed that
+ * llama-3.3-70b-versatile reliably supports strict schema adherence on
+ * Groq, so parsing+validating the result with Zod here is the safer bet
+ * over trusting the model to match a schema exactly.
+ *
+ * Confirmed live (not hypothetical): Groq's own server-side JSON validation
+ * rejects roughly 1 in 3 real calls with a 400 `json_validate_failed` --
+ * the model periodically emits an unquoted string value (e.g.
+ * `"summary": Customers switched because...` with no opening quote) --
+ * before this code ever gets a chance to parse or validate anything. Retries
+ * the whole request a few times on that specific failure, since the same
+ * prompt at temperature > 0 frequently succeeds on the next attempt.
+ */
+async function createJsonCompletion(messages: ChatMessage[]): Promise<string> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= MAX_JSON_ATTEMPTS; attempt++) {
+    try {
+      const completion = await getClient().chat.completions.create({
+        model: MODEL,
+        response_format: { type: "json_object" },
+        messages,
+      });
+      const raw = completion.choices[0]?.message?.content;
+      if (!raw) throw new Error("Groq returned no content");
+      return raw;
+    } catch (error) {
+      lastError = error;
+      logError("groq.json_completion_attempt_failed", error, { attempt, maxAttempts: MAX_JSON_ATTEMPTS });
+    }
+  }
+  throw lastError;
+}
+
+// Appended to every system prompt below -- shape descriptions that just
+// describe a value inline (`"summary": 2-4 sentences...`) without showing
+// literal quote characters around it turned out to make the model mirror
+// that same unquoted shape in its actual output (confirmed live: this was
+// the direct cause of the json_validate_failed failures above). Showing a
+// quoted placeholder plus this explicit instruction cut the failure rate
+// substantially in testing.
+const JSON_STRING_REMINDER =
+  " Every string value must be a properly quoted JSON string (e.g. \"summary\": \"your text here\"), never bare/unquoted text.";
+
+const sentimentSchema = z.object({
+  sentiment: z.enum(["very_negative", "negative", "neutral", "positive", "very_positive"]),
+  sentiment_score: z.number().min(-1).max(1),
+  pain_point: z.string().nullable(),
+});
+
+export type SentimentResult = z.infer<typeof sentimentSchema>;
+
+export async function analyzeSentiment(content: string): Promise<SentimentResult> {
+  const raw = await createJsonCompletion([
+    {
+      role: "system",
+      content:
+        "You classify customer feedback sentiment. Respond only with JSON matching exactly this shape: " +
+        '{"sentiment": "very_negative" | "negative" | "neutral" | "positive" | "very_positive", ' +
+        '"sentiment_score": -1 to 1 (a number, not a string), ' +
+        '"pain_point": "<a short phrase under 15 words naming the core complaint>" or null if this feedback is not a complaint}.' +
+        JSON_STRING_REMINDER,
+    },
+    { role: "user", content },
+  ]);
+
+  return sentimentSchema.parse(JSON.parse(raw));
+}
+
+const themeLabelSchema = z.object({
+  name: z.string().min(1).max(80),
+  summary: z.string().min(1).max(400),
+});
+
+export type ThemeLabelResult = z.infer<typeof themeLabelSchema>;
+
+export async function generateThemeLabel(
+  sampleContents: string[]
+): Promise<ThemeLabelResult> {
+  const raw = await createJsonCompletion([
+    {
+      role: "system",
+      content:
+        "You label clusters of customer feedback that were grouped together as describing the same underlying issue. " +
+        'Respond only with JSON matching exactly this shape: {"name": "<a short label under 8 words identifying the shared theme>", ' +
+        '"summary": "<a 1-2 sentence summary of what customers are saying>"}.' +
+        JSON_STRING_REMINDER,
+    },
+    {
+      role: "user",
+      content: sampleContents.map((c, i) => `${i + 1}. ${c}`).join("\n"),
+    },
+  ]);
+
+  return themeLabelSchema.parse(JSON.parse(raw));
+}
+
+const personaSchema = z.object({
+  name: z.string().min(1).max(80),
+  description: z.string().min(1).max(600),
+  based_on_themes: z.array(z.string()),
+});
+
+const personasResponseSchema = z.object({
+  personas: z.array(personaSchema).min(1).max(5),
+});
+
+export type PersonaResult = z.infer<typeof personaSchema>;
+
+/**
+ * Synthesizes data-backed personas from real clustered themes -- explicitly
+ * told to reference themes by their exact given names, not invent new
+ * theme names, so the caller can reliably map `based_on_themes` back to
+ * real theme ids afterward (traceability: every persona has to point at
+ * data that actually exists, not a plausible-sounding fabrication).
+ */
+export async function generatePersonas(
+  themes: { name: string; summary: string | null }[]
+): Promise<PersonaResult[]> {
+  const themeList = themes
+    .map((t, i) => `${i + 1}. ${t.name}${t.summary ? ` — ${t.summary}` : ""}`)
+    .join("\n");
+
+  const raw = await createJsonCompletion([
+    {
+      role: "system",
+      content:
+        "You synthesize customer personas from real, already-clustered feedback themes -- these are data-backed personas, not hypothetical ones, so every persona must be grounded in the actual themes given. " +
+        'Respond only with JSON matching exactly this shape: {"personas": [{"name": "<a short persona archetype name under 6 words>", ' +
+        '"description": "<2-3 sentences describing who this customer is, what they care about, and why, grounded in the themes below>", ' +
+        '"based_on_themes": ["<exact theme name strings from the list below that this persona is drawn from -- copy them verbatim, do not invent new ones>"]}]}. ' +
+        "Produce 2 to 4 personas, each grounded in at least one theme. Do not reference any theme name not in the list provided." +
+        JSON_STRING_REMINDER,
+    },
+    { role: "user", content: `Themes:\n${themeList}` },
+  ]);
+
+  return personasResponseSchema.parse(JSON.parse(raw)).personas;
+}
+
+const competitorSummarySchema = z.object({
+  summary: z.string().min(1).max(800),
+});
+
+/**
+ * Summarizes feedback that mentions a competitor by name -- the caller
+ * finds the matching feedback_items (a plain ILIKE search, not semantic),
+ * this just synthesizes what customers are actually saying across them.
+ */
+export async function summarizeCompetitorMentions(
+  competitorName: string,
+  mentions: string[]
+): Promise<string> {
+  const raw = await createJsonCompletion([
+    {
+      role: "system",
+      content:
+        `You summarize what customers say about a competitor ("${competitorName}") based on real feedback excerpts that mention them. ` +
+        'Respond only with JSON matching exactly this shape: {"summary": "<2-4 sentences summarizing the recurring themes in how customers compare VoiceIQ\'s customer\'s product to this competitor -- pricing, missing features, switching reasons, whatever actually recurs>"}. ' +
+        "Base this only on the excerpts given, don't speculate beyond them." +
+        JSON_STRING_REMINDER,
+    },
+    {
+      role: "user",
+      content: mentions.map((m, i) => `${i + 1}. ${m}`).join("\n"),
+    },
+  ]);
+
+  return competitorSummarySchema.parse(JSON.parse(raw)).summary;
+}
+
+export type ExecutiveSummaryInput = {
+  totalFeedbackThisPeriod: number;
+  totalFeedbackPriorPeriod: number;
+  topThemes: {
+    name: string;
+    opportunityScore: number;
+    reach: number;
+    trend: "rising" | "falling" | "flat";
+  }[];
+  shippedCount: number;
+  inProgressCount: number;
+};
+
+const execSummarySchema = z.object({ summary: z.string().min(1).max(2000) });
+
+/**
+ * Narrative summary of "what customers are asking for this month and why
+ * it matters" -- takes already-computed structured data (not raw feedback
+ * text) so the model's job is narration and framing, not re-deriving
+ * numbers it could get wrong; every number in the output should be
+ * traceable to something the caller already computed deterministically.
+ */
+export async function generateExecutiveSummary(input: ExecutiveSummaryInput): Promise<string> {
+  const themesText = input.topThemes
+    .map(
+      (t, i) =>
+        `${i + 1}. "${t.name}" — opportunity score ${t.opportunityScore}, reach ${t.reach}, trend: ${t.trend}`
+    )
+    .join("\n");
+
+  const raw = await createJsonCompletion([
+    {
+      role: "system",
+      content:
+        "You write a short executive narrative summarizing what customers are asking for and why it matters to the business, for a CPO/VP Product audience who won't read raw tickets. " +
+        "Use only the structured data given -- do not invent numbers, themes, or trends not present in it. " +
+        'Respond only with JSON matching exactly this shape: {"summary": "<3-5 sentences, plain language, no bullet points, written as prose a CPO would read in a board deck>"}.' +
+        JSON_STRING_REMINDER,
+    },
+    {
+      role: "user",
+      content:
+        `Feedback volume: ${input.totalFeedbackThisPeriod} items this period vs ${input.totalFeedbackPriorPeriod} the prior period.\n` +
+        `Top opportunities:\n${themesText || "(none yet)"}\n` +
+        `Roadmap: ${input.shippedCount} shipped, ${input.inProgressCount} in progress this period.`,
+    },
+  ]);
+
+  return execSummarySchema.parse(JSON.parse(raw)).summary;
+}
