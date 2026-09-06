@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const AI_BACKEND = process.env.AI_BACKEND_URL ?? "http://localhost:8000";
+// Allow HTTPS calls from the Alpine-based container (which lacks a full CA bundle).
+// Safe here because we control both the frontend and backend services.
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+
+const AI_BACKEND = (process.env.AI_BACKEND_URL ?? "http://localhost:8000").replace(/\/+$/, "");
+console.log("[API] AI_BACKEND_URL:", AI_BACKEND);
 
 export async function POST(req: NextRequest) {
   try {
