@@ -9,11 +9,13 @@ from pydantic import BaseModel, Field
 
 load_dotenv()
 
-def _get_llm() -> ChatGroq:
+MODELS = ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.6-27b"]
+
+def _get_llm(model_name: str) -> ChatGroq:
     key = os.environ.get("GROQ_API_KEY", "")
     if not key:
         raise RuntimeError("GROQ_API_KEY is not set. Check backend/.env")
-    return ChatGroq(temperature=0, model_name="openai/gpt-oss-120b", groq_api_key=key)
+    return ChatGroq(temperature=0, model_name=model_name, groq_api_key=key)
 
 SYSTEM_PROMPT = """You are an expert customer intelligence analyst. You have access to
 customer feedback data from the VoiceIQ platform. Answer the user's questions clearly,
@@ -25,8 +27,9 @@ class ChatState(TypedDict):
     context: str  # Injected feedback context from the database
 
 def chat_node(state: ChatState) -> ChatState:
-    """Main LLM node that answers user questions using the feedback context."""
-    llm = _get_llm()
+    """Main LLM node that answers user questions using the feedback context.
+    Tries each model in MODELS in order, falling back if one is unavailable/overloaded.
+    """
     system_with_context = (
         f"{SYSTEM_PROMPT}\n\n"
         f"Here is a sample of recent customer feedback from the organisation:\n\n"
@@ -37,13 +40,22 @@ def chat_node(state: ChatState) -> ChatState:
         HumanMessage(content=system_with_context),
         *state["messages"],
     ]
-    try:
-        response = llm.invoke(messages_to_send)
-    except Exception as e:
-        # Log the error for debugging (in a real app you might use proper logging)
-        print(f"[chat_agent] LLM error: {e}")
-        # Return a user-friendly message indicating the model is overloaded or unavailable
-        response = AIMessage(content="Sorry, the AI service is currently overloaded. Please try again later.")
+
+    last_error = None
+    for model in MODELS:
+        try:
+            print(f"[chat_agent] Trying model: {model}")
+            llm = _get_llm(model)
+            response = llm.invoke(messages_to_send)
+            print(f"[chat_agent] Success with model: {model}")
+            return {"messages": [response]}
+        except Exception as e:
+            print(f"[chat_agent] Model {model} failed: {e}")
+            last_error = e
+
+    # All models failed
+    print(f"[chat_agent] All models failed. Last error: {last_error}")
+    response = AIMessage(content="Sorry, the AI service is temporarily unavailable. Please try again in a moment.")
     return {"messages": [response]}
 
 # Build the RAG chat graph
