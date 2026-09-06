@@ -40,7 +40,11 @@ export async function proxy(request: NextRequest) {
     }
   );
 
-  await supabase.auth.getUser();
+  try {
+    await supabase.auth.getUser();
+  } catch (err) {
+    console.error("[proxy auth refresh error]", err);
+  }
 
   return response;
 }
