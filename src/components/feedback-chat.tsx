@@ -2,6 +2,8 @@
 
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 type Message = {
   id: string;
@@ -128,7 +130,20 @@ export function FeedbackChat({ context }: { context: string }) {
                     : "bg-surface border border-border text-foreground rounded-bl-sm"
                 }`}
               >
-                {msg.content}
+                {msg.role === "assistant" ? (
+                  <div className="prose prose-sm dark:prose-invert max-w-none
+                    prose-headings:font-semibold prose-headings:mt-3 prose-headings:mb-1
+                    prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5
+                    prose-table:text-xs prose-th:px-2 prose-th:py-1 prose-td:px-2 prose-td:py-1
+                    prose-table:border prose-th:border prose-td:border prose-td:border-border prose-th:border-border
+                    prose-strong:font-semibold prose-code:bg-muted prose-code:rounded prose-code:px-1">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {msg.content}
+                    </ReactMarkdown>
+                  </div>
+                ) : (
+                  msg.content
+                )}
               </div>
             </motion.div>
           ))}

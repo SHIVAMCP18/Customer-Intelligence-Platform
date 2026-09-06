@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
 
 /* Manual dark mode: .dark on <html> drives every dark: utility, instead of
    only ever following the OS setting. Set by an inline script in the root
