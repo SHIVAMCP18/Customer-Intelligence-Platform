@@ -27,11 +27,21 @@ export async function login(
     return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
 
-  const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithPassword(parsed.data);
+  try {
+    const supabase = await createClient();
+    const { error } = await supabase.auth.signInWithPassword(parsed.data);
 
-  if (error) {
-    return { error: error.message };
+    if (error) {
+      return { error: error.message };
+    }
+  } catch (err: any) {
+    if (err?.digest?.startsWith("NEXT_REDIRECT")) throw err;
+    return {
+      error:
+        err instanceof Error
+          ? `Connection error (${err.message}). Check your NEXT_PUBLIC_SUPABASE_URL environment variable.`
+          : "Failed to connect to authentication server.",
+    };
   }
 
   redirect(safeRedirectTarget(parsed.data.next));

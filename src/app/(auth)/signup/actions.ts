@@ -34,22 +34,32 @@ export async function signup(
 
   const { fullName, email, password, next } = parsed.data;
   const target = safeRedirectTarget(next);
-  const supabase = await createClient();
-
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      data: { full_name: fullName },
-      emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback?next=${encodeURIComponent(target)}`,
-    },
-  });
-
-  if (error) {
-    return { error: error.message };
+  let data;
+  try {
+    const supabase = await createClient();
+    const res = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { full_name: fullName },
+        emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback?next=${encodeURIComponent(target)}`,
+      },
+    });
+    if (res.error) {
+      return { error: res.error.message };
+    }
+    data = res.data;
+  } catch (err: any) {
+    if (err?.digest?.startsWith("NEXT_REDIRECT")) throw err;
+    return {
+      error:
+        err instanceof Error
+          ? `Connection error (${err.message}). Check your NEXT_PUBLIC_SUPABASE_URL environment variable.`
+          : "Failed to connect to authentication server.",
+    };
   }
 
-  if (data.session) {
+  if (data?.session) {
     redirect(target);
   }
 
