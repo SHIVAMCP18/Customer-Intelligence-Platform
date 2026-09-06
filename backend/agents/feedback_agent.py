@@ -1,16 +1,18 @@
 import os
-from typing import TypedDict, Annotated, Sequence
-from langchain_core.messages import BaseMessage, HumanMessage
+from typing import TypedDict
+from dotenv import load_dotenv
+from langchain_core.messages import HumanMessage
 from langchain_groq import ChatGroq
 from langgraph.graph import StateGraph, END
 from pydantic import BaseModel, Field
 
-# Ensure we have the API key
-groq_api_key = os.environ.get("GROQ_API_KEY", "")
-if not groq_api_key:
-    raise ValueError("GROQ_API_KEY environment variable not set")
+load_dotenv()
 
-llm = ChatGroq(temperature=0, model_name="llama3-70b-8192", groq_api_key=groq_api_key)
+def _get_llm() -> ChatGroq:
+    key = os.environ.get("GROQ_API_KEY", "")
+    if not key:
+        raise RuntimeError("GROQ_API_KEY is not set. Check backend/.env")
+    return ChatGroq(temperature=0, model_name="llama-3.1-8b-instant", groq_api_key=key)
 
 class AgentState(TypedDict):
     feedback_text: str
@@ -27,17 +29,25 @@ class FeedbackAnalysis(BaseModel):
 
 def analyze_feedback(state: AgentState) -> AgentState:
     """Analyze the feedback text using structured output."""
+    llm = _get_llm()
     prompt = f"Analyze the following customer feedback:\n\n{state['feedback_text']}"
-    
-    # Use LLM with structured output
-    structured_llm = llm.with_structured_output(FeedbackAnalysis)
-    result = structured_llm.invoke([HumanMessage(content=prompt)])
-    
+    try:
+        structured_llm = llm.with_structured_output(FeedbackAnalysis)
+        result = structured_llm.invoke([HumanMessage(content=prompt)])
+    except Exception as e:
+        print(f"[feedback_agent] LLM error: {e}")
+        # Return placeholder values indicating overload
+        result = FeedbackAnalysis(
+            sentiment="unknown",
+            pain_points=[],
+            is_urgent=False,
+            summary="AI service unavailable"
+        )
     return {
         "sentiment": result.sentiment,
         "pain_points": result.pain_points,
         "is_urgent": result.is_urgent,
-        "summary": result.summary
+        "summary": result.summary,
     }
 
 # Build the LangGraph

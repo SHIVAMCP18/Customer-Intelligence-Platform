@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from agents.feedback_agent import process_feedback
+from ..agents.feedback_agent import process_feedback
 
 router = APIRouter(prefix="/feedback", tags=["feedback"])
 
@@ -13,7 +13,7 @@ class AnalyzeResponse(BaseModel):
     is_urgent: bool
     summary: str
 
-@router.post("/analyze", response_model=AnalyzeResponse)
+@router.post("/", response_model=AnalyzeResponse)
 async def analyze_feedback_endpoint(body: AnalyzeRequest):
     """
     Analyze a single piece of customer feedback using the LangGraph agent.
