@@ -47,3 +47,12 @@ CLAUDE.md
 AGENTS.md
 PROGRESS_LOG.md
 VoiceIQ_Project_Plan.md
+
+# python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+.env_python/
