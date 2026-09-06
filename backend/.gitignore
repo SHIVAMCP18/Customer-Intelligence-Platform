@@ -1,0 +1,11 @@
+# Python backend
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+.env_python/
+
+# backend env
+backend/.env
