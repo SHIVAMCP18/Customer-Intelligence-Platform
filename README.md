@@ -2,7 +2,7 @@
 
 Customer feedback is scattered across support tickets, reviews, surveys, call notes, and sales conversations — which means the loudest voice, not the most common or highest-impact one, tends to win roadmap debates. VoiceIQ turns that scattered feedback into a continuously updated, prioritized product opportunity map, so prioritization is evidence-based instead of anecdote-based.
 
-**Live:** [customer-voice-intelligence-platfor.vercel.app](https://customer-voice-intelligence-platfor.vercel.app)
+**Live:** [frontend-production-b159.up.railway.app](https://frontend-production-b159.up.railway.app)
 
 ## What it does
 
@@ -14,7 +14,7 @@ Customer feedback is scattered across support tickets, reviews, surveys, call no
 ## Tech stack
 
 - **Frontend:** Next.js (App Router) + TypeScript + Tailwind CSS
-- **Hosting:** Vercel
+- **Hosting:** Railway
 - **Database / Auth:** Supabase (Postgres, Auth, Storage, Row-Level Security, pgvector)
 - **AI:** Groq (Llama 3.3) for sentiment, summarization, and clustering labels
 - **Caching / rate limiting:** Upstash Redis

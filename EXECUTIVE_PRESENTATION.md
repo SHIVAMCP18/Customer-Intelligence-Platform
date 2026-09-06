@@ -20,7 +20,7 @@ The market splits into roadmap tools with feedback bolted on (Productboard, Pend
 
 ## Where the product stands today
 
-The full loop is built and demoable end to end, not just scaffolded: multi-tenant auth/RBAC, three ingestion paths, automatic embedding/clustering/sentiment, RICE-based scoring, trend detection, AI-generated personas, a roadmap tracker, competitive insight notes, and an auto-drafted executive narrative — all running on Row-Level-Security-enforced multi-tenancy, audited, rate-limited, structured-error-logged, and covered by a CI-gated unit-test suite. Built entirely on free-tier infrastructure (Supabase, Vercel, Groq, Hugging Face, Upstash) — the cost floor to run this for an early customer is close to zero, which is deliberate: see [PRICING_STRATEGY.md](./PRICING_STRATEGY.md) for why that matters to the go-to-market motion, not just the budget.
+The full loop is built and demoable end to end, not just scaffolded: multi-tenant auth/RBAC, three ingestion paths, automatic embedding/clustering/sentiment, RICE-based scoring, trend detection, AI-generated personas, a roadmap tracker, competitive insight notes, and an auto-drafted executive narrative — all running on Row-Level-Security-enforced multi-tenancy, audited, rate-limited, structured-error-logged, and covered by a CI-gated unit-test suite. Built entirely on free-tier infrastructure (Supabase, Railway, Groq, Hugging Face, Upstash) — the cost floor to run this for an early customer is close to zero, which is deliberate: see [PRICING_STRATEGY.md](./PRICING_STRATEGY.md) for why that matters to the go-to-market motion, not just the budget.
 
 ## Business model
 
