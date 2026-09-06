@@ -1,5 +1,7 @@
 # VoiceIQ Enterprise
 
+> **VoiceIQ is an AI-powered customer intelligence platform that aggregates scattered feedback, clusters it into actionable themes, and scores opportunities by sentiment and business impact to drive evidence-based product roadmaps.**
+
 Customer feedback is scattered across support tickets, reviews, surveys, call notes, and sales conversations — which means the loudest voice, not the most common or highest-impact one, tends to win roadmap debates. VoiceIQ turns that scattered feedback into a continuously updated, prioritized product opportunity map, so prioritization is evidence-based instead of anecdote-based.
 
 **Live:** [frontend-production-b159.up.railway.app](https://frontend-production-b159.up.railway.app)
