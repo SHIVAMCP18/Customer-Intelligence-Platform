@@ -1,5 +1,6 @@
 "use server";
 
+import { getAppUrl } from "@/lib/env";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
@@ -53,7 +54,7 @@ export async function createInvite(
   });
 
   revalidatePath("/settings");
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
+  const appUrl = await getAppUrl();
   return { link: `${appUrl}/invite/${data.token}` };
 }
 

@@ -4,18 +4,22 @@ import { z } from "zod";
 import { logError } from "@/lib/log-error";
 
 // Confirmed against Groq's own model docs rather than assumed from memory.
-const MODEL = "llama-3.3-70b-versatile";
+export const MODEL = "llama-3.3-70b-versatile";
 
 let client: Groq | null = null;
 
-function getClient(): Groq {
+export function isGroqConfigured(): boolean {
+  return Boolean(process.env.GROQ_API_KEY);
+}
+
+export function getClient(): Groq {
   if (!client) {
     if (!process.env.GROQ_API_KEY) {
       throw new Error(
         "GROQ_API_KEY is not set -- sentiment analysis and theme labeling are unavailable until it's configured."
       );
     }
-    client = new Groq({ apiKey: process.env.GROQ_API_KEY });
+    client = new Groq({ apiKey: process.env.GROQ_API_KEY, timeout: 30_000, maxRetries: 1 });
   }
   return client;
 }

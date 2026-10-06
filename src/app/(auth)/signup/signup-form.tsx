@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import Link from "next/link";
 import { signup } from "./actions";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,10 @@ import { Input, Label, FieldError } from "@/components/ui/input";
 
 export function SignupForm({ next }: { next?: string }) {
   const [state, formAction, isPending] = useActionState(signup, undefined);
+  // Controlled so a failed submit (React resets uncontrolled fields after an
+  // action) doesn't wipe what the user already typed.
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
 
   if (state?.message) {
     return (
@@ -22,11 +26,27 @@ export function SignupForm({ next }: { next?: string }) {
       {next && <input type="hidden" name="next" value={next} />}
       <div>
         <Label htmlFor="fullName">Full name</Label>
-        <Input id="fullName" name="fullName" type="text" required autoComplete="name" />
+        <Input
+          id="fullName"
+          name="fullName"
+          type="text"
+          required
+          autoComplete="name"
+          value={fullName}
+          onChange={(e) => setFullName(e.target.value)}
+        />
       </div>
       <div>
         <Label htmlFor="email">Email</Label>
-        <Input id="email" name="email" type="email" required autoComplete="email" />
+        <Input
+          id="email"
+          name="email"
+          type="email"
+          required
+          autoComplete="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
       </div>
       <div>
         <Label htmlFor="password">Password</Label>

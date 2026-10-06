@@ -3,8 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentMembership } from "@/lib/org";
-import { computeOpportunityScore, getThemeStats } from "@/lib/scoring";
-import { getThemeTrend } from "@/lib/trends";
+import { computeOpportunityScore, getOrgThemeStats, statsFor } from "@/lib/scoring";
+import { getOrgThemeTrends, trendFor } from "@/lib/trends";
 import { generateExecutiveSummary } from "@/lib/groq";
 import { logError } from "@/lib/log-error";
 
@@ -47,25 +47,30 @@ export async function generateSummary(): Promise<GenerateSummaryState> {
     .eq("org_id", membership.orgId)
     .not("name", "is", null);
 
-  const scoredThemes = await Promise.all(
-    (themes ?? []).map(async (theme) => {
-      const [stats, trend] = await Promise.all([
-        getThemeStats(supabase, theme.id),
-        getThemeTrend(supabase, theme.id),
-      ]);
-      const score = computeOpportunityScore(stats, {
-        impactOverride: theme.impact_override as number | null,
-        confidenceOverride: theme.confidence_override as number | null,
-        effort: theme.effort as number,
-      });
-      return {
-        name: theme.name as string,
-        opportunityScore: score.opportunityScore,
-        reach: score.reach,
-        trend: trend.direction,
-      };
-    })
-  );
+  let stats, trends;
+  try {
+    [stats, trends] = await Promise.all([
+      getOrgThemeStats(supabase, membership.orgId),
+      getOrgThemeTrends(supabase, membership.orgId),
+    ]);
+  } catch (error) {
+    logError("executive_summary.load_stats", error, { orgId: membership.orgId });
+    return { error: "Couldn't load theme statistics. Try again in a moment." };
+  }
+
+  const scoredThemes = (themes ?? []).map((theme) => {
+    const score = computeOpportunityScore(statsFor(stats, theme.id), {
+      impactOverride: theme.impact_override as number | null,
+      confidenceOverride: theme.confidence_override as number | null,
+      effort: theme.effort as number,
+    });
+    return {
+      name: theme.name as string,
+      opportunityScore: score.opportunityScore,
+      reach: score.reach,
+      trend: trendFor(trends, theme.id).direction,
+    };
+  });
   scoredThemes.sort((a, b) => b.opportunityScore - a.opportunityScore);
   const topThemes = scoredThemes.slice(0, TOP_THEMES_COUNT);
 

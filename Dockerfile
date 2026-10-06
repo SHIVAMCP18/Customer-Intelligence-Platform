@@ -4,7 +4,7 @@ FROM node:22-alpine AS base
 FROM base AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm install
+RUN npm ci
 
 # ---- builder ----
 FROM base AS builder
@@ -12,15 +12,9 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-ARG NEXT_PUBLIC_SUPABASE_URL
-ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
-ARG NEXT_PUBLIC_APP_URL
-ARG NEXT_PUBLIC_AI_BACKEND_URL
-
-ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
-ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
-ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
-ENV NEXT_PUBLIC_AI_BACKEND_URL=$NEXT_PUBLIC_AI_BACKEND_URL
+# No build args needed: server code reads NEXT_PUBLIC_* at runtime (see
+# src/lib/env.ts), so the same image works in every environment.
+ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN npm run build
 

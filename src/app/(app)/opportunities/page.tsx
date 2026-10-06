@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentMembership } from "@/lib/org";
-import { computeOpportunityScore, getThemeStats } from "@/lib/scoring";
+import { computeOpportunityScore, getOrgThemeStats, statsFor } from "@/lib/scoring";
 import { ThemeRow } from "./theme-row";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/card";
@@ -13,22 +13,23 @@ export default async function OpportunitiesPage() {
   if (!membership) return null;
 
   const supabase = await createClient();
-  const { data: themes } = await supabase
-    .from("themes")
-    .select("id, name, summary, item_count, impact_override, confidence_override, effort")
-    .eq("org_id", membership.orgId);
+  const [{ data: themes, error }, stats] = await Promise.all([
+    supabase
+      .from("themes")
+      .select("id, name, summary, item_count, impact_override, confidence_override, effort")
+      .eq("org_id", membership.orgId),
+    getOrgThemeStats(supabase, membership.orgId),
+  ]);
+  if (error) throw new Error(`Failed to load themes: ${error.message}`);
 
-  const scored = await Promise.all(
-    (themes ?? []).map(async (theme) => {
-      const stats = await getThemeStats(supabase, theme.id);
-      const score = computeOpportunityScore(stats, {
-        impactOverride: theme.impact_override as number | null,
-        confidenceOverride: theme.confidence_override as number | null,
-        effort: theme.effort as number,
-      });
-      return { theme, score };
-    })
-  );
+  const scored = (themes ?? []).map((theme) => {
+    const score = computeOpportunityScore(statsFor(stats, theme.id), {
+      impactOverride: theme.impact_override as number | null,
+      confidenceOverride: theme.confidence_override as number | null,
+      effort: theme.effort as number,
+    });
+    return { theme, score };
+  });
 
   scored.sort((a, b) => b.score.opportunityScore - a.score.opportunityScore);
 

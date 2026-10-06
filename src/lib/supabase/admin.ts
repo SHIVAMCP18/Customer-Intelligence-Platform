@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import { getSupabaseUrl } from "@/lib/env";
 
 /**
  * Service-role client for trusted server-only code (the public widget
@@ -10,7 +11,7 @@ import { createClient as createSupabaseClient } from "@supabase/supabase-js";
  */
 export function createAdminClient() {
   return createSupabaseClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    getSupabaseUrl()!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     {
       auth: {

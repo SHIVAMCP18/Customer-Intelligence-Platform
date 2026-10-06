@@ -6,7 +6,14 @@ import { createClient } from "@/lib/supabase/server";
 
 export async function signOut() {
   const supabase = await createClient();
-  await supabase.auth.signOut();
+  // "local" ends only this browser's session (the default, "global", also
+  // signs the user out on every other device). Errors are ignored: even if
+  // the Auth server can't be reached, signOut() still clears the session
+  // cookies, which is what actually signs this browser out.
+  await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
+  // Drop every cached page rendered for the signed-in user, so Back/Forward
+  // can't show stale authenticated content after signing out.
+  revalidatePath("/", "layout");
   redirect("/login");
 }
 

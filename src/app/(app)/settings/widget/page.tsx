@@ -1,3 +1,4 @@
+import { getAppUrl } from "@/lib/env";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
@@ -17,7 +18,7 @@ export default async function WidgetSettingsPage() {
     .eq("org_id", membership.orgId)
     .order("name");
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
+  const appUrl = await getAppUrl();
 
   return (
     <div>

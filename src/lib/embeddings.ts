@@ -10,6 +10,10 @@ const EMBEDDING_DIMENSIONS = 384;
 
 let client: InferenceClient | null = null;
 
+export function isEmbeddingConfigured(): boolean {
+  return Boolean(process.env.HUGGINGFACE_API_TOKEN);
+}
+
 function getClient(): InferenceClient {
   if (!client) {
     if (!process.env.HUGGINGFACE_API_TOKEN) {

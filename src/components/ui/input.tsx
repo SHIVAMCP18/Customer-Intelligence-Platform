@@ -23,5 +23,9 @@ export function Label({ className = "", ...props }: React.LabelHTMLAttributes<HT
 
 export function FieldError({ children }: { children?: string | null }) {
   if (!children) return null;
-  return <p className="mt-1.5 text-sm text-red-600 dark:text-red-400">{children}</p>;
+  return (
+    <p role="alert" className="mt-1.5 text-sm text-red-600 dark:text-red-400">
+      {children}
+    </p>
+  );
 }

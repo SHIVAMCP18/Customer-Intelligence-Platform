@@ -1,17 +1,14 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/supabase/server";
+import { signOut } from "@/app/(app)/actions";
 import { getCurrentMembership } from "@/lib/org";
 import { OnboardingForm } from "./onboarding-form";
 
 export const metadata: Metadata = { title: "Set up your organization — VoiceIQ Enterprise" };
 
 export default async function OnboardingPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
+  const user = await getCurrentUser();
   if (!user) {
     redirect("/login");
   }
@@ -34,6 +31,12 @@ export default async function OnboardingPage() {
         </p>
         <OnboardingForm />
       </div>
+      <form action={signOut} className="mt-6 text-sm text-muted-foreground">
+        Signed in as {user.email}.{" "}
+        <button type="submit" className="font-medium text-primary hover:text-primary-hover">
+          Sign out
+        </button>
+      </form>
     </div>
   );
 }

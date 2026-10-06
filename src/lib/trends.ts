@@ -25,11 +25,39 @@ export async function getThemeTrend(
   if (error) throw new Error(`get_theme_trend failed: ${error.message}`);
 
   const rows = (data ?? []) as { week_start: string; item_count: number }[];
-  const weeks: WeeklyPoint[] = rows.map((r) => ({
-    weekStart: r.week_start,
-    count: r.item_count,
-  }));
+  return computeTrend(rows.map((r) => ({ weekStart: r.week_start, count: r.item_count })));
+}
 
+/**
+ * Trends for every theme in the org in one round-trip
+ * (get_org_theme_trends). Themes with no recent feedback are absent from the
+ * map -- use trendFor() to read with a flat, empty default.
+ */
+export async function getOrgThemeTrends(
+  supabase: SupabaseClient,
+  orgId: string
+): Promise<Map<string, ThemeTrend>> {
+  const { data, error } = await supabase.rpc("get_org_theme_trends", {
+    p_org_id: orgId,
+    p_weeks: WEEKS_TO_FETCH,
+  });
+  if (error) throw new Error(`get_org_theme_trends failed: ${error.message}`);
+
+  const byTheme = new Map<string, WeeklyPoint[]>();
+  for (const r of (data ?? []) as { theme_id: string; week_start: string; item_count: number }[]) {
+    const weeks = byTheme.get(r.theme_id) ?? [];
+    weeks.push({ weekStart: r.week_start, count: r.item_count });
+    byTheme.set(r.theme_id, weeks);
+  }
+
+  return new Map([...byTheme].map(([themeId, weeks]) => [themeId, computeTrend(weeks)]));
+}
+
+export function trendFor(trends: Map<string, ThemeTrend>, themeId: string): ThemeTrend {
+  return trends.get(themeId) ?? computeTrend([]);
+}
+
+export function computeTrend(weeks: WeeklyPoint[]): ThemeTrend {
   const recentTotal = sumInWeekRange(weeks, 0, COMPARISON_WINDOW_WEEKS);
   const priorTotal = sumInWeekRange(weeks, COMPARISON_WINDOW_WEEKS, COMPARISON_WINDOW_WEEKS * 2);
 

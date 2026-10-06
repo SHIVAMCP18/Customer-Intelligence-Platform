@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/supabase/server";
 import { getCurrentMembership, listMemberships } from "@/lib/org";
 import { signOut } from "./actions";
 import { OrgSwitcher } from "./org-switcher";
@@ -10,21 +10,15 @@ import { ThemeToggle } from "@/components/theme-toggle";
 export default async function AppLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
+  const user = await getCurrentUser();
   if (!user) {
     redirect("/login");
   }
 
-  const membership = await getCurrentMembership();
+  const [membership, memberships] = await Promise.all([getCurrentMembership(), listMemberships()]);
   if (!membership) {
     redirect("/onboarding");
   }
-
-  const memberships = await listMemberships();
 
   return (
     <div className="flex min-h-screen bg-background">

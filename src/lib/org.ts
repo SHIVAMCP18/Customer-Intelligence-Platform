@@ -1,4 +1,5 @@
-import { createClient } from "@/lib/supabase/server";
+import { cache } from "react";
+import { createClient, getCurrentUser } from "@/lib/supabase/server";
 
 export type OrgRole = "admin" | "member" | "viewer";
 
@@ -21,13 +22,11 @@ export type MembershipSummary = {
  */
 
 /** All orgs the signed-in user belongs to, for the org switcher. */
-export async function listMemberships(): Promise<MembershipSummary[]> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+export const listMemberships = cache(async (): Promise<MembershipSummary[]> => {
+  const user = await getCurrentUser();
   if (!user) return [];
 
+  const supabase = await createClient();
   const { data } = await supabase
     .from("org_members")
     .select("org_id, role, organizations(name)")
@@ -44,31 +43,22 @@ export async function listMemberships(): Promise<MembershipSummary[]> {
       role: row.role as OrgRole,
     };
   });
-}
+});
 
 /**
  * The user's active org (profiles.current_org_id), falling back to whichever
  * membership was found first if unset or stale (e.g. removed from that org).
  */
-export async function getCurrentMembership(): Promise<CurrentMembership | null> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+export const getCurrentMembership = cache(async (): Promise<CurrentMembership | null> => {
+  const user = await getCurrentUser();
   if (!user) return null;
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("current_org_id")
-    .eq("id", user.id)
-    .single();
-
-  const memberships = await listMemberships();
+  const supabase = await createClient();
+  const [{ data: profile }, memberships] = await Promise.all([
+    supabase.from("profiles").select("current_org_id").eq("id", user.id).maybeSingle(),
+    listMemberships(),
+  ]);
   if (memberships.length === 0) return null;
 
-  const active =
-    memberships.find((m) => m.orgId === profile?.current_org_id) ??
-    memberships[0];
-
-  return active;
-}
+  return memberships.find((m) => m.orgId === profile?.current_org_id) ?? memberships[0];
+});

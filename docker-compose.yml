@@ -1,38 +1,11 @@
-# version: "3.9"
-
 services:
-  # ── AI / Python Backend ─────────────────────────────────────────────────────
-  backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: voiceiq-backend
-    ports:
-      - "8000:8000"
-    env_file:
-      - ./backend/.env
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
-
-  # ── Next.js Frontend ─────────────────────────────────────────────────────────
-  frontend:
+  app:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: voiceiq-frontend
+    container_name: voiceiq
     ports:
-      - "3001:3000"
+      - "3000:3000"
     env_file:
       - .env.local
-    environment:
-      - AI_BACKEND_URL=http://backend:8000
-      - NEXT_PUBLIC_AI_BACKEND_URL=http://backend:8000
-    depends_on:
-      backend:
-        condition: service_healthy
     restart: unless-stopped

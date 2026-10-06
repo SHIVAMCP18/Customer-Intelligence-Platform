@@ -48,30 +48,65 @@ export default async function DashboardPage({
   const supabase = await createClient();
   const page = Math.max(1, Number(params.page) || 1);
 
-  const filteredTheme = params.theme
-    ? (await supabase.from("themes").select("name").eq("id", params.theme).single()).data
-    : null;
-
-  const [{ data: channels }, { data: tags }] = await Promise.all([
+  // Everything that doesn't depend on another query runs in parallel.
+  const [
+    filteredThemeRes,
+    { data: channels },
+    { data: tags },
+    tagLinksRes,
+    { count: unclusteredCount },
+    { data: sentimentRows },
+    { count: themeCount },
+  ] = await Promise.all([
+    params.theme
+      ? supabase.from("themes").select("name").eq("id", params.theme).maybeSingle()
+      : Promise.resolve(null),
     supabase.from("channels").select("id, name").eq("org_id", membership.orgId).order("name"),
     supabase.from("tags").select("id, name").eq("org_id", membership.orgId).order("name"),
+    params.tag
+      ? supabase.from("feedback_item_tags").select("feedback_item_id").eq("tag_id", params.tag)
+      : Promise.resolve(null),
+    supabase
+      .from("feedback_items")
+      .select("id", { count: "exact", head: true })
+      .eq("org_id", membership.orgId)
+      .or("theme_id.is.null,sentiment.is.null"),
+    supabase.rpc("get_feedback_sentiment_counts", { p_org_id: membership.orgId }),
+    supabase
+      .from("themes")
+      .select("id", { count: "exact", head: true })
+      .eq("org_id", membership.orgId),
   ]);
+  const filteredTheme = filteredThemeRes?.data ?? null;
 
   let matchingIds: string[] | null = null;
-  if (params.tag) {
-    const { data: tagLinks } = await supabase
-      .from("feedback_item_tags")
-      .select("feedback_item_id")
-      .eq("tag_id", params.tag);
-    matchingIds = (tagLinks ?? []).map((t) => t.feedback_item_id as string);
+  if (tagLinksRes) {
+    matchingIds = (tagLinksRes.data ?? []).map((t) => t.feedback_item_id as string);
     if (matchingIds.length === 0) matchingIds = [NO_MATCH_ID];
   }
 
-  const { count: unclusteredCount } = await supabase
-    .from("feedback_items")
-    .select("*", { count: "exact", head: true })
-    .eq("org_id", membership.orgId)
-    .or("theme_id.is.null,sentiment.is.null");
+  const sentimentCounts = new Map(
+    ((sentimentRows ?? []) as { sentiment: string | null; item_count: number }[]).map((r) => [
+      r.sentiment,
+      r.item_count,
+    ])
+  );
+  const totalFeedback = [...sentimentCounts.values()].reduce((a, b) => a + b, 0);
+  const analyzed = totalFeedback - (sentimentCounts.get(null) ?? 0);
+  const negative = (sentimentCounts.get("negative") ?? 0) + (sentimentCounts.get("very_negative") ?? 0);
+  const positive = (sentimentCounts.get("positive") ?? 0) + (sentimentCounts.get("very_positive") ?? 0);
+  const pct = (n: number) => (analyzed > 0 ? `${Math.round((n / analyzed) * 100)}%` : "—");
+
+  const kpis = [
+    { label: "Total feedback", value: totalFeedback.toLocaleString(), hint: "all channels" },
+    { label: "Themes", value: (themeCount ?? 0).toLocaleString(), hint: "auto-clustered" },
+    { label: "Negative", value: pct(negative), hint: `${positive.toLocaleString()} positive · ${negative.toLocaleString()} negative` },
+    {
+      label: "Awaiting AI",
+      value: (unclusteredCount ?? 0).toLocaleString(),
+      hint: unclusteredCount ? "not yet clustered or scored" : "everything processed",
+    },
+  ];
 
   let query = supabase
     .from("feedback_items")
@@ -130,6 +165,16 @@ export default async function DashboardPage({
           ) : undefined
         }
       />
+
+      <div className="stagger-children mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {kpis.map((k) => (
+          <Card key={k.label} className="p-4">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{k.label}</p>
+            <p className="mt-1 text-2xl font-semibold tabular-nums tracking-tight text-foreground">{k.value}</p>
+            <p className="mt-0.5 truncate text-xs text-muted-foreground">{k.hint}</p>
+          </Card>
+        ))}
+      </div>
 
       {membership.role !== "viewer" && <ProcessBacklogButton unclusteredCount={unclusteredCount ?? 0} />}
 
@@ -236,7 +281,7 @@ export default async function DashboardPage({
                   key={item.id}
                   className="border-b border-border last:border-0 transition-colors hover:bg-surface-hover"
                 >
-                  <td className="max-w-sm p-3">
+                  <td className="min-w-[16rem] max-w-md p-3">
                     <span className="line-clamp-2">{item.content}</span>
                   </td>
                   <td className="p-3 whitespace-nowrap">

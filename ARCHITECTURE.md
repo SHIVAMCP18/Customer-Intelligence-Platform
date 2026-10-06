@@ -272,3 +272,39 @@ Wired into CI (`.github/workflows/ci.yml`): `npm run test` runs after lint and b
 - **Supabase auth email:** free tier ships a small number of auth emails per hour via Supabase's own SMTP — confirmed directly (hit "email rate limit exceeded" during Sprint 1 testing after only a couple of signups), not just a theoretical ceiling. Driving the shareable-link invite design above instead of relying on it, and why automated verification scripts create test users via the admin API rather than the public signup flow.
 - **Upstash Redis free tier:** 500K commands/month, 256MB — ample for rate-limiting at this scale, revisit only if traffic ever becomes real.
 - **Groq free tier:** generous but rate-limited per-model requests/minute — relevant starting Sprint 2, will document actual limits hit (if any) once the clustering pipeline is running against it.
+
+## RAG chat and batched analytics (migration `20260706100000`)
+
+**Chat.** `/api/ai/chat` is a Next.js route handler — the earlier separate
+FastAPI/LangGraph service was removed. The old flow sent the 50 most recent
+feedback items from the browser as "context", so answers never saw older
+feedback, the client controlled what the model read, and the route had no
+auth check. Now, per question:
+
+1. The route resolves the signed-in user's org (401 otherwise) and applies the
+   Upstash rate limit.
+2. Two retrievers run in parallel, both as the user (RLS applies):
+   `match_feedback()` (cosine similarity over `feedback_items.embedding`,
+   HNSW-indexed) and `search_feedback()` (Postgres full-text search over a
+   generated `search_tsv` column, GIN-indexed). Results are merged with
+   reciprocal-rank fusion; broad questions that match little are topped up
+   with recent feedback.
+3. An org overview (sentiment mix from `get_feedback_sentiment_counts()`,
+   largest themes from `get_org_theme_stats()`) plus the numbered sources go
+   into the system prompt, and Groq's answer is streamed back as NDJSON
+   (`sources` event first, then `delta`s). The UI renders `[n]` markers as
+   clickable citations.
+
+Each stage degrades independently: no embedding API → full-text only; no LLM →
+the retrieved feedback is returned as the answer.
+
+**Batched analytics.** Opportunities, Trends and the executive summary used to
+call `get_theme_stats` / `get_theme_trend` once per theme — dozens of
+round-trips per page, and any single failure crashed the page.
+`get_org_theme_stats(org)` and `get_org_theme_trends(org, weeks)` return every
+theme in one query each. Pages are also wrapped in `error.tsx` / `loading.tsx`
+boundaries.
+
+**Auth.** `src/proxy.ts` now guards routes (signed-out → `/login?next=…`,
+signed-in visitors of `/`, `/login`, `/signup` → dashboard), and the
+per-request user/membership lookups are memoized with React `cache()`.

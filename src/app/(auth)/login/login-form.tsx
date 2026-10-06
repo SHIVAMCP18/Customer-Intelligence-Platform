@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import Link from "next/link";
 import { login } from "./actions";
 import { Button } from "@/components/ui/button";
@@ -8,13 +8,25 @@ import { Input, Label, FieldError } from "@/components/ui/input";
 
 export function LoginForm({ next }: { next?: string }) {
   const [state, formAction, isPending] = useActionState(login, undefined);
+  // Controlled, because React resets uncontrolled form fields after every
+  // action -- a wrong password would otherwise also wipe the email, and the
+  // next submit would be silently blocked by the field's `required` check.
+  const [email, setEmail] = useState("");
 
   return (
     <form action={formAction} className="space-y-4">
       {next && <input type="hidden" name="next" value={next} />}
       <div>
         <Label htmlFor="email">Email</Label>
-        <Input id="email" name="email" type="email" required autoComplete="email" />
+        <Input
+          id="email"
+          name="email"
+          type="email"
+          required
+          autoComplete="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
       </div>
       <div>
         <Label htmlFor="password">Password</Label>

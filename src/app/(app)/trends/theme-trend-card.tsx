@@ -7,7 +7,35 @@ import { Card } from "@/components/ui/card";
 import { TrendBadge } from "@/components/ui/badge";
 
 function formatWeek(weekStart: string): string {
-  return new Date(weekStart).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return new Date(`${weekStart}T00:00:00Z`).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+const WEEKS_SHOWN = 8;
+
+/**
+ * get_theme_trend only returns weeks that had feedback, so a plain bar chart
+ * would silently drop empty weeks and make e.g. "3 items, then nothing for a
+ * month, then 3" look like steady volume. Lays the counts onto the last 8
+ * calendar weeks (Monday starts, matching Postgres' date_trunc('week')).
+ */
+function fillWeeks(weeks: ThemeTrend["weeks"]): { week: string; count: number }[] {
+  const counts = new Map(weeks.map((w) => [w.weekStart.slice(0, 10), w.count]));
+  const now = new Date();
+  const monday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  monday.setUTCDate(monday.getUTCDate() - ((monday.getUTCDay() + 6) % 7));
+
+  const result: { week: string; count: number }[] = [];
+  for (let i = WEEKS_SHOWN - 1; i >= 0; i--) {
+    const d = new Date(monday);
+    d.setUTCDate(d.getUTCDate() - i * 7);
+    const key = d.toISOString().slice(0, 10);
+    result.push({ week: formatWeek(key), count: counts.get(key) ?? 0 });
+  }
+  return result;
 }
 
 export function ThemeTrendCard({
@@ -19,7 +47,7 @@ export function ThemeTrendCard({
   name: string | null;
   trend: ThemeTrend;
 }) {
-  const chartData = trend.weeks.map((w) => ({ week: formatWeek(w.weekStart), count: w.count }));
+  const chartData = trend.weeks.length === 0 ? [] : fillWeeks(trend.weeks);
 
   return (
     <Card interactive className="p-4">

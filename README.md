@@ -12,13 +12,14 @@ Customer feedback is scattered across support tickets, reviews, surveys, call no
 - Clusters feedback into themes using semantic embeddings
 - Scores each theme by volume, sentiment, and business impact (RICE-based)
 - Surfaces data-backed personas and an executive-ready narrative of what customers are asking for and why it matters
+- **AI Chat (RAG):** ask questions in plain English; answers are retrieved from your own feedback (hybrid pgvector + full-text search), streamed from Llama 3.3, and cite the exact feedback items they rely on
 
 ## Tech stack
 
 - **Frontend:** Next.js (App Router) + TypeScript + Tailwind CSS
 - **Hosting:** Railway
 - **Database / Auth:** Supabase (Postgres, Auth, Storage, Row-Level Security, pgvector)
-- **AI:** Groq (Llama 3.3) for sentiment, summarization, and clustering labels
+- **AI:** Groq (Llama 3.3) for sentiment, summarization, clustering labels and the RAG chat; Hugging Face `all-MiniLM-L6-v2` embeddings (384-d) stored in pgvector
 - **Caching / rate limiting:** Upstash Redis
 - **Charts:** Recharts
 
@@ -26,13 +27,44 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for schema and pipeline details, and [P
 
 ## Getting started
 
+Everything runs in the single Next.js app — there is no separate AI server.
+
 ```bash
 npm install
 cp .env.example .env.local   # fill in your own service keys
+npx supabase db push         # apply supabase/migrations to your project
 npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
+
+Only the two Supabase keys are required. Every AI feature degrades gracefully
+without its key: with no `HUGGINGFACE_API_TOKEN` the chat falls back to
+Postgres full-text retrieval, and with no `GROQ_API_KEY` it returns the most
+relevant feedback instead of a generated answer.
+
+To run against a local Supabase instead: `npx supabase start`, then put the
+printed API URL and anon key in `.env.local`.
+
+### How the RAG chat works
+
+```
+question ─┬─ embed (MiniLM) ─► match_feedback()   semantic search, pgvector HNSW
+          └────────────────► search_feedback()  Postgres full-text search
+                                   │
+                  reciprocal-rank fusion ─► top 10 feedback items
+                                   │
+   org overview (theme sizes, sentiment mix) + numbered sources ─► Groq, streamed
+```
+
+Retrieval runs as the signed-in user, so row-level security keeps it inside
+the user's own organization. See `src/lib/rag.ts`, `src/lib/rag-server.ts`
+and `src/app/api/ai/chat/route.ts`.
+
+### Deploying (Docker / Railway)
+
+`NEXT_PUBLIC_*` values are read at runtime on the server, so one image works
+for any environment — set the variables on the service, no build args needed.
 
 ## Project docs
 

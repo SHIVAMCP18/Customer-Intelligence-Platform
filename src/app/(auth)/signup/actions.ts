@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { safeRedirectTarget } from "@/lib/safe-redirect";
+import { logError } from "@/lib/log-error";
+import { getAppUrl } from "@/lib/env";
 
 const signupSchema = z.object({
   fullName: z.string().trim().min(1, "Name is required").max(200),
@@ -37,26 +39,22 @@ export async function signup(
   let data;
   try {
     const supabase = await createClient();
+    const appUrl = await getAppUrl();
     const res = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: { full_name: fullName },
-        emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback?next=${encodeURIComponent(target)}`,
+        emailRedirectTo: `${appUrl}/auth/callback?next=${encodeURIComponent(target)}`,
       },
     });
     if (res.error) {
       return { error: res.error.message };
     }
     data = res.data;
-  } catch (err: any) {
-    if (err?.digest?.startsWith("NEXT_REDIRECT")) throw err;
-    return {
-      error:
-        err instanceof Error
-          ? `Connection error (${err.message}). Check your NEXT_PUBLIC_SUPABASE_URL environment variable.`
-          : "Failed to connect to authentication server.",
-    };
+  } catch (err) {
+    logError("auth.signup", err);
+    return { error: "Couldn't reach the sign-in service. Please try again in a moment." };
   }
 
   if (data?.session) {

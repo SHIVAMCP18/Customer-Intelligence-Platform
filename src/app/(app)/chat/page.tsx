@@ -10,36 +10,22 @@ export default async function ChatPage() {
   const membership = await getCurrentMembership();
   if (!membership) return null;
 
+  // Only a count is needed here: retrieval happens server-side per question
+  // (see /api/ai/chat), so no feedback is shipped to the browser up front.
   const supabase = await createClient();
-
-  // Fetch recent feedback to use as RAG context
-  const { data } = await supabase
+  const { count } = await supabase
     .from("feedback_items")
-    .select("content, sentiment, channels(name)")
-    .eq("org_id", membership.orgId)
-    .order("created_at", { ascending: false })
-    .limit(50);
-
-  const context =
-    (data ?? [])
-      .map((item) => {
-        const channels: any = item.channels;
-        const channel = Array.isArray(channels) && channels.length > 0
-          ? channels[0].name
-          : channels?.name || "unknown";
-        const sentiment = item.sentiment ?? "unanalyzed";
-        return `[${channel} | ${sentiment}] ${item.content}`;
-      })
-      .join("\n") || "No feedback available yet.";
+    .select("id", { count: "exact", head: true })
+    .eq("org_id", membership.orgId);
 
   return (
-    <div className="flex h-full flex-col" style={{ minHeight: "calc(100vh - 4rem)" }}>
+    <div className="flex flex-col">
       <PageHeader
         title="AI Chat"
-        description="Ask natural-language questions about your customer feedback. Powered by LangGraph + Llama 3."
+        description="Ask questions in plain English. Answers are retrieved from your feedback and cite their sources."
       />
-      <div className="mt-4 flex-1 overflow-hidden rounded-xl border border-border bg-surface shadow-sm" style={{ height: "calc(100vh - 12rem)" }}>
-        <FeedbackChat context={context} />
+      <div className="h-[calc(100dvh-13rem)] min-h-[28rem] overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
+        <FeedbackChat orgId={membership.orgId} feedbackCount={count ?? 0} />
       </div>
     </div>
   );

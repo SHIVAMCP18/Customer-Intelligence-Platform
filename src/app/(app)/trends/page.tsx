@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentMembership } from "@/lib/org";
-import { getThemeTrend } from "@/lib/trends";
+import { getOrgThemeTrends, trendFor } from "@/lib/trends";
 import { ThemeTrendCard } from "./theme-trend-card";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/card";
@@ -13,17 +13,16 @@ export default async function TrendsPage() {
   if (!membership) return null;
 
   const supabase = await createClient();
-  const { data: themes } = await supabase
-    .from("themes")
-    .select("id, name")
-    .eq("org_id", membership.orgId);
+  const [{ data: themes, error }, trends] = await Promise.all([
+    supabase.from("themes").select("id, name").eq("org_id", membership.orgId),
+    getOrgThemeTrends(supabase, membership.orgId),
+  ]);
+  if (error) throw new Error(`Failed to load themes: ${error.message}`);
 
-  const withTrends = await Promise.all(
-    (themes ?? []).map(async (theme) => ({
-      theme,
-      trend: await getThemeTrend(supabase, theme.id),
-    }))
-  );
+  const withTrends = (themes ?? []).map((theme) => ({
+    theme,
+    trend: trendFor(trends, theme.id),
+  }));
 
   // Rising themes first (the ones that most need attention), then by recent volume.
   const directionRank = { rising: 0, flat: 1, falling: 2 };

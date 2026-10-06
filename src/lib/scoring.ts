@@ -106,3 +106,42 @@ export async function getThemeStats(
     sentimentStddev: data.sentiment_stddev,
   };
 }
+
+const EMPTY_STATS: ThemeStats = { itemCount: 0, reach: 0, avgSentiment: null, sentimentStddev: null };
+
+/**
+ * Stats for every theme in the org in one round-trip (get_org_theme_stats).
+ * Themes with no feedback in the 90-day window are simply absent from the
+ * map -- use statsFor() to read with a zeroed default.
+ */
+export async function getOrgThemeStats(
+  supabase: SupabaseClient,
+  orgId: string
+): Promise<Map<string, ThemeStats>> {
+  const { data, error } = await supabase.rpc("get_org_theme_stats", { p_org_id: orgId });
+  if (error) throw new Error(`get_org_theme_stats failed: ${error.message}`);
+
+  const rows = (data ?? []) as {
+    theme_id: string;
+    item_count: number | null;
+    reach: number | null;
+    avg_sentiment: number | null;
+    sentiment_stddev: number | null;
+  }[];
+
+  return new Map(
+    rows.map((r) => [
+      r.theme_id,
+      {
+        itemCount: r.item_count ?? 0,
+        reach: r.reach ?? 0,
+        avgSentiment: r.avg_sentiment,
+        sentimentStddev: r.sentiment_stddev,
+      },
+    ])
+  );
+}
+
+export function statsFor(stats: Map<string, ThemeStats>, themeId: string): ThemeStats {
+  return stats.get(themeId) ?? EMPTY_STATS;
+}
