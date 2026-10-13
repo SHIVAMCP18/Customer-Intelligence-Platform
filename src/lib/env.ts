@@ -1,5 +1,6 @@
 import "server-only";
 import { headers } from "next/headers";
+import { isLocalHost, publicOrigin } from "@/lib/public-origin";
 
 /**
  * Next.js inlines `process.env.NEXT_PUBLIC_*` at *build* time. The Docker
@@ -32,19 +33,26 @@ export function isSupabaseConfigured(): boolean {
 
 /**
  * The public origin of the app, for links that leave the app (email
- * confirmation, invite links, the widget embed snippet). Prefers the
- * configured APP_URL, and otherwise falls back to the origin of the current
- * request -- so a missing env var degrades to a working link instead of
- * "undefined/auth/callback".
+ * confirmation, invite links, the widget embed snippet). Uses APP_URL /
+ * NEXT_PUBLIC_APP_URL when set, otherwise the origin of the current request.
+ * A configured localhost URL is ignored when the request comes from a real
+ * domain -- copying .env.example's value to production would otherwise send
+ * every confirmation email to http://localhost:3000.
  */
 export async function getAppUrl(): Promise<string> {
-  const configured = readEnv("APP_URL", "NEXT_PUBLIC_APP_URL");
-  if (configured) return configured.replace(/\/+$/, "");
-
   const h = await headers();
-  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
-  const proto =
-    h.get("x-forwarded-proto")?.split(",")[0]?.trim() ??
-    (host.startsWith("localhost") || host.startsWith("127.") ? "http" : "https");
-  return `${proto}://${host}`;
+  const requestOrigin = publicOrigin(h);
+  const configured = readEnv("APP_URL", "NEXT_PUBLIC_APP_URL")?.replace(/\/+$/, "");
+
+  if (configured) {
+    let configuredIsLocal = false;
+    try {
+      configuredIsLocal = isLocalHost(new URL(configured).host);
+    } catch {
+      configuredIsLocal = true; // malformed -- don't trust it
+    }
+    const requestIsLocal = isLocalHost(new URL(requestOrigin).host);
+    if (!configuredIsLocal || requestIsLocal) return configured;
+  }
+  return requestOrigin;
 }

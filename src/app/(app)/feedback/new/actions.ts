@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentMembership } from "@/lib/org";
@@ -56,6 +57,7 @@ export async function createFeedback(
       .select("id")
       .eq("org_id", membership.orgId)
       .eq("name", customerName)
+      .limit(1)
       .maybeSingle();
 
     if (existingCustomer) {
@@ -122,7 +124,11 @@ export async function createFeedback(
     p_metadata: { source: "manual", channel: channelName },
   });
 
-  await tryProcessFeedbackItem(supabase, membership.orgId, feedbackItem.id, content);
+  // Embedding, sentiment and theme labeling are several external API calls;
+  // run them after the response so saving feedback returns immediately.
+  // (Anything that fails here is picked up by "Process next batch".)
+  const orgId = membership.orgId;
+  after(() => tryProcessFeedbackItem(supabase, orgId, feedbackItem.id, content));
 
   redirect("/dashboard");
 }

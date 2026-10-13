@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { safeRedirectTarget } from "@/lib/safe-redirect";
 import { logError } from "@/lib/log-error";
 import { getAppUrl } from "@/lib/env";
+import { friendlyAuthError } from "@/lib/auth-errors";
 
 const signupSchema = z.object({
   fullName: z.string().trim().min(1, "Name is required").max(200),
@@ -27,7 +28,7 @@ export async function signup(
     fullName: formData.get("fullName"),
     email: formData.get("email"),
     password: formData.get("password"),
-    next: formData.get("next") ?? undefined,
+    next: formData.get("next") || undefined,
   });
 
   if (!parsed.success) {
@@ -49,17 +50,28 @@ export async function signup(
       },
     });
     if (res.error) {
-      return { error: res.error.message };
+      logError("auth.signup", res.error);
+      return { error: friendlyAuthError(res.error) };
     }
     data = res.data;
   } catch (err) {
     logError("auth.signup", err);
-    return { error: "Couldn't reach the sign-in service. Please try again in a moment." };
+    return { error: friendlyAuthError({ name: "AuthRetryableFetchError" }) };
+  }
+
+  // With email confirmation on, Supabase deliberately doesn't reveal whether
+  // an address is taken: signing up again "succeeds" but returns a user with
+  // no identities and sends no email. Say so instead of promising an email
+  // that will never arrive.
+  if (data?.user && !data.session && data.user.identities?.length === 0) {
+    return { error: friendlyAuthError({ code: "user_already_exists" }) };
   }
 
   if (data?.session) {
     redirect(target);
   }
 
-  return { message: "Check your email to confirm your account, then sign in." };
+  return {
+    message: `We sent a confirmation link to ${email}. Open it to activate your account, then sign in. (Check your spam folder if it doesn't arrive within a few minutes.)`,
+  };
 }

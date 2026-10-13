@@ -15,9 +15,21 @@ export function SignupForm({ next }: { next?: string }) {
 
   if (state?.message) {
     return (
-      <p className="animate-fade-in text-sm text-foreground" role="status">
-        {state.message}
-      </p>
+      <div className="animate-fade-in space-y-4 text-center" role="status">
+        <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-primary-soft text-primary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5" aria-hidden>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0l-9.75 6.75L2.25 6.75" />
+          </svg>
+        </div>
+        <p className="text-sm font-medium text-foreground">Check your email</p>
+        <p className="text-sm text-muted-foreground">{state.message}</p>
+        <Link
+          href={next ? `/login?next=${encodeURIComponent(next)}` : "/login"}
+          className="inline-block text-sm font-medium text-primary hover:text-primary-hover"
+        >
+          Go to sign in →
+        </Link>
+      </div>
     );
   }
 

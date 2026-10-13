@@ -65,6 +65,32 @@ and `src/app/api/ai/chat/route.ts`.
 
 `NEXT_PUBLIC_*` values are read at runtime on the server, so one image works
 for any environment — set the variables on the service, no build args needed.
+`railway.json` pins the Dockerfile build and uses `/api/health` as the
+health check.
+
+**Troubleshooting:** open `https://<your-app>/api/health`. It reports (without
+revealing any secrets) whether Supabase is configured and reachable, whether
+the database migrations are applied, and which AI keys are missing.
+
+### Supabase Auth settings (needed for sign-up emails)
+
+In the Supabase dashboard → **Authentication → URL Configuration**:
+
+- **Site URL:** your app's URL, e.g. `https://frontend-production-b159.up.railway.app`
+- **Redirect URLs:** add `https://frontend-production-b159.up.railway.app/**`
+
+Without these, confirmation emails link to `localhost`.
+
+Optional, recommended — lets people confirm from a different device than the
+one they signed up on (e.g. sign up on a laptop, open the email on a phone):
+**Authentication → Emails → Confirm signup**, change the link to
+
+```
+{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email
+```
+
+Supabase's built-in email service only sends a few emails per hour; for real
+users configure custom SMTP under **Authentication → Emails → SMTP Settings**.
 
 ## Project docs
 

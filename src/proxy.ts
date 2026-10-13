@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { publicOrigin } from "@/lib/public-origin";
 
 // Pages that need a signed-in user. Checked here, before any rendering, so a
 // signed-out visitor goes straight to /login instead of half-rendering a page.
@@ -81,7 +82,7 @@ export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
 
   const redirectTo = (path: string) => {
-    const target = new URL(path, request.url);
+    const target = new URL(path, publicOrigin(request.headers, request.url));
     const redirect = NextResponse.redirect(target);
     // Carry over any refreshed session cookies.
     response.cookies.getAll().forEach((c) => redirect.cookies.set(c));

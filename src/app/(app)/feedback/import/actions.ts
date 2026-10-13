@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentMembership } from "@/lib/org";
 
 const MAX_ROWS = 2000;
+const INSERT_CHUNK = 500;
 
 const importRowSchema = z.object({
   content: z.string(),
@@ -106,47 +107,76 @@ export async function importFeedbackCsv(
   const errors: ImportResult["errors"] = [];
   let succeeded = 0;
 
-  for (let i = 0; i < parsed.data.rows.length; i++) {
-    const row = parsed.data.rows[i];
+  type PreparedRow = { rowNumber: number; content: string; customerId: string | null; tags: string[] };
+  const prepared: PreparedRow[] = [];
+  parsed.data.rows.forEach((row, i) => {
     const content = row.content.trim();
     if (!content) {
       errors.push({ row: i + 1, message: "Missing content" });
-      continue;
+      return;
     }
+    const customerName = row.customerName?.trim();
+    prepared.push({
+      rowNumber: i + 1,
+      content,
+      customerId: customerName ? (customerMap.get(customerName) ?? null) : null,
+      tags: (row.tags ?? "").split(",").map((t) => t.trim()).filter(Boolean),
+    });
+  });
 
-    const customerId = row.customerName?.trim()
-      ? (customerMap.get(row.customerName.trim()) ?? null)
-      : null;
+  const toInsert = (r: PreparedRow) => ({
+    org_id: orgId,
+    channel_id: channel.id,
+    customer_id: r.customerId,
+    content: r.content,
+    source: "csv_import" as const,
+    created_by: user?.id ?? null,
+  });
 
-    const { data: feedbackItem, error: feedbackError } = await supabase
+  // Insert in chunks -- one request per row made a 2,000-row import take
+  // thousands of sequential round-trips and time out. PostgREST returns
+  // inserted rows in input order, so ids line up with `chunk`.
+  for (let start = 0; start < prepared.length; start += INSERT_CHUNK) {
+    const chunk = prepared.slice(start, start + INSERT_CHUNK);
+    const { data: inserted, error } = await supabase
       .from("feedback_items")
-      .insert({
-        org_id: orgId,
-        channel_id: channel.id,
-        customer_id: customerId,
-        content,
-        source: "csv_import",
-        created_by: user?.id ?? null,
-      })
-      .select("id")
-      .single();
+      .insert(chunk.map(toInsert))
+      .select("id");
 
-    if (feedbackError) {
-      errors.push({ row: i + 1, message: feedbackError.message });
-      continue;
+    let ids: (string | null)[];
+    if (!error && inserted && inserted.length === chunk.length) {
+      ids = inserted.map((r) => r.id as string);
+    } else {
+      // A bad row fails the whole batch -- retry this chunk row by row so
+      // only the bad rows are reported.
+      ids = [];
+      for (const r of chunk) {
+        const { data: one, error: rowError } = await supabase
+          .from("feedback_items")
+          .insert(toInsert(r))
+          .select("id")
+          .single();
+        if (rowError) errors.push({ row: r.rowNumber, message: rowError.message });
+        ids.push(rowError ? null : (one.id as string));
+      }
     }
 
-    const rowTags = (row.tags ?? "").split(",").map((t) => t.trim()).filter(Boolean);
-    const tagLinks = rowTags
-      .map((t) => tagMap.get(t))
-      .filter((id): id is string => Boolean(id))
-      .map((tagId) => ({ feedback_item_id: feedbackItem.id, tag_id: tagId }));
+    const tagLinks = chunk.flatMap((r, i) => {
+      const feedbackItemId = ids[i];
+      if (!feedbackItemId) return [];
+      return r.tags
+        .map((t) => tagMap.get(t))
+        .filter((id): id is string => Boolean(id))
+        .map((tagId) => ({ feedback_item_id: feedbackItemId, tag_id: tagId }));
+    });
     if (tagLinks.length > 0) {
-      await supabase.from("feedback_item_tags").insert(tagLinks);
+      await supabase.from("feedback_item_tags").upsert(tagLinks, { ignoreDuplicates: true });
     }
 
-    succeeded++;
+    succeeded += ids.filter(Boolean).length;
   }
+
+  errors.sort((x, y) => x.row - y.row);
 
   if (succeeded > 0) {
     await supabase.rpc("log_audit_event", {

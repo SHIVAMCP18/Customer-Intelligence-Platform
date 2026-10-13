@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { parseJsonBody } from "@/lib/api/validate";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -52,7 +52,8 @@ export async function POST(
       .from("customers")
       .select("id")
       .eq("org_id", channel.org_id)
-      .ilike("email", parsed.data.email)
+      .ilike("email", parsed.data.email.replace(/[%_\\]/g, "\\$&"))
+      .limit(1)
       .maybeSingle();
 
     if (existingCustomer) {
@@ -101,7 +102,8 @@ export async function POST(
     metadata: { source: "widget" },
   });
 
-  await tryProcessFeedbackItem(supabase, channel.org_id, feedbackItem.id, parsed.data.content);
+  // Respond to the visitor right away; AI enrichment happens afterwards.
+  after(() => tryProcessFeedbackItem(supabase, channel.org_id, feedbackItem.id, parsed.data.content));
 
   return NextResponse.json({ ok: true });
 }
